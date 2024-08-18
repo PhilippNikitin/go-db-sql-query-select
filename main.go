@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 
 	_ "modernc.org/sqlite"
@@ -19,11 +20,43 @@ func (s Sale) String() string {
 }
 
 func selectSales(client int) ([]Sale, error) {
-	var sales []Sale
+	// подключаемся к БД
+	db, err := sql.Open("sqlite", "demo.db")
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close() // выполняем отложенное закрытие соединения с БД
 
-	// напишите код здесь
+	// получаем количество покупок, т.е. количество строк, у клиента с интересующим id
+	var rowsCount int
+	err = db.QueryRow("SELECT COUNT(*) FROM sales WHERE client = :client", sql.Named("client", client)).Scan(&rowsCount)
+	if err != nil {
+		return nil, err
+	}
+	// зная количество строк, мы можем создать слайс с известной capacity (равной rowsCount) для оптимизации выделения памяти
+	var actualSales = make([]Sale, 0, rowsCount)
 
-	return sales, nil
+	// выполняем SELECT-запрос по получению информации об интересующем клиенте
+	rows, err := db.Query("SELECT product, volume, date FROM sales WHERE client = :client", sql.Named("client", client))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	// заполненяем массив в переменной actualSales объектами Sale, в которых будут данные из таблицы
+	for rows.Next() {
+		sale := Sale{}
+
+		err := rows.Scan(&sale.Product, &sale.Volume, &sale.Date)
+		if err != nil {
+			return nil, err
+		}
+		actualSales = append(actualSales, sale)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return actualSales, nil
 }
 
 func main() {
